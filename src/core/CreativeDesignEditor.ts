@@ -57,12 +57,18 @@ export class CreativeDesignEditor {
   private renderPending = false;
 
   private isDragging = false;
+  private dragType: 'move' | 'resize' | 'rotate' | null = null;
   private dragLayerId: string | null = null;
   private dragStartX = 0;
   private dragStartY = 0;
   private dragLayerStartX = 0;
   private dragLayerStartY = 0;
+  private dragLayerStartW = 0;
+  private dragLayerStartH = 0;
+  private dragLayerStartRot = 0;
+  private dragHandle = '';
   private hasDragged = false;
+  private isShiftPressed = false;
 
   private boundHandleMouseDown: (e: MouseEvent) => void;
   private boundHandleMouseMove: (e: MouseEvent) => void;
@@ -225,6 +231,28 @@ export class CreativeDesignEditor {
       ctx.strokeRect(handle.x - handleSize / 2, handle.y - handleSize / 2, handleSize, handleSize);
     }
 
+    const handleDistance = Math.max(layer.width, layer.height) / 2 + 16;
+    const rotateX = layer.x + layer.width / 2;
+    const rotateY = layer.y - 16;
+
+    ctx.strokeStyle = '#2196F3';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(layer.x + layer.width / 2, layer.y);
+    ctx.lineTo(layer.x + layer.width / 2, layer.y - 16);
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(layer.x + layer.width / 2, layer.y - 20, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#2196F3';
+    ctx.beginPath();
+    ctx.arc(layer.x + layer.width / 2, layer.y - 20, 4, 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.restore();
   }
 
@@ -240,37 +268,169 @@ export class CreativeDesignEditor {
     if (e.button !== 0) return;
 
     const pos = this.getCanvasMousePos(e);
-    const layer = this.layerManager.getLayerAtPoint(pos.x, pos.y);
+    const selectedId = this.selectionManager.getSelectedId();
 
+    if (selectedId) {
+      const selected = this.layerManager.getById(selectedId);
+      if (selected && !selected.locked) {
+        const handle = this.getResizeHandleAtPoint(pos.x, pos.y, selected);
+        if (handle) {
+          this.startResize(selected, handle, pos.x, pos.y);
+          return;
+        }
+
+        const hitRotate = this.hitRotateHandle(pos.x, pos.y, selected);
+        if (hitRotate) {
+          this.startRotate(selected, pos.x, pos.y);
+          return;
+        }
+      }
+    }
+
+    const layer = this.layerManager.getLayerAtPoint(pos.x, pos.y);
     if (layer) {
       this.selectLayer(layer.id);
-      this.isDragging = true;
-      this.dragLayerId = layer.id;
-      this.dragStartX = pos.x;
-      this.dragStartY = pos.y;
-      this.dragLayerStartX = layer.x;
-      this.dragLayerStartY = layer.y;
-      this.hasDragged = false;
-      this.canvas.style.cursor = 'move';
-      this.selectionManager.setLayers(this.layerManager.getAll());
+      if (!layer.locked) {
+        this.startMove(layer, pos.x, pos.y);
+      }
     } else {
       this.clearSelection();
     }
   }
 
+  private startMove(layer: Layer, x: number, y: number): void {
+    this.isDragging = true;
+    this.dragType = 'move';
+    this.dragLayerId = layer.id;
+    this.dragStartX = x;
+    this.dragStartY = y;
+    this.dragLayerStartX = layer.x;
+    this.dragLayerStartY = layer.y;
+    this.hasDragged = false;
+    this.canvas.style.cursor = 'move';
+    this.selectionManager.setLayers(this.layerManager.getAll());
+  }
+
+  private startResize(layer: Layer, handle: string, x: number, y: number): void {
+    this.isDragging = true;
+    this.dragType = 'resize';
+    this.dragLayerId = layer.id;
+    this.dragHandle = handle;
+    this.dragStartX = x;
+    this.dragStartY = y;
+    this.dragLayerStartX = layer.x;
+    this.dragLayerStartY = layer.y;
+    this.dragLayerStartW = layer.width;
+    this.dragLayerStartH = layer.height;
+    this.dragLayerStartRot = layer.rotation || 0;
+    this.hasDragged = false;
+
+    const cursors: Record<string, string> = {
+      nw: 'nw-resize', n: 'n-resize', ne: 'ne-resize',
+      w: 'w-resize', e: 'e-resize',
+      sw: 'sw-resize', s: 's-resize', se: 'se-resize',
+    };
+    this.canvas.style.cursor = cursors[handle] || 'default';
+    this.selectionManager.setLayers(this.layerManager.getAll());
+  }
+
+  private startRotate(layer: Layer, x: number, y: number): void {
+    this.isDragging = true;
+    this.dragType = 'rotate';
+    this.dragLayerId = layer.id;
+    this.dragStartX = x;
+    this.dragStartY = y;
+    this.dragLayerStartRot = layer.rotation || 0;
+    this.hasDragged = false;
+    this.canvas.style.cursor = 'crosshair';
+  }
+
+  private getResizeHandleAtPoint(x: number, y: number, layer: Layer): string | null {
+    const handleSize = 10;
+    const half = handleSize / 2;
+
+    const centerX = layer.x + layer.width / 2;
+    const centerY = layer.y + layer.height / 2;
+    const angle = ((layer.rotation || 0) * Math.PI) / 180;
+
+    const rotatePoint = (px: number, py: number): { x: number; y: number } => {
+      const dx = px - centerX;
+      const dy = py - centerY;
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      return {
+        x: centerX + dx * cos - dy * sin,
+        y: centerY + dx * sin + dy * cos,
+      };
+    };
+
+    const handles = [
+      { name: 'nw', px: layer.x, py: layer.y },
+      { name: 'n', px: centerX, py: layer.y },
+      { name: 'ne', px: layer.x + layer.width, py: layer.y },
+      { name: 'w', px: layer.x, py: centerY },
+      { name: 'e', px: layer.x + layer.width, py: centerY },
+      { name: 'sw', px: layer.x, py: layer.y + layer.height },
+      { name: 's', px: centerX, py: layer.y + layer.height },
+      { name: 'se', px: layer.x + layer.width, py: layer.y + layer.height },
+    ];
+
+    for (const h of handles) {
+      const rotated = rotatePoint(h.px, h.py);
+      if (
+        x >= rotated.x - half &&
+        x <= rotated.x + half &&
+        y >= rotated.y - half &&
+        y <= rotated.y + half
+      ) {
+        return h.name;
+      }
+    }
+
+    return null;
+  }
+
+  private hitRotateHandle(x: number, y: number, layer: Layer): boolean {
+    const centerX = layer.x + layer.width / 2;
+    const centerY = layer.y + layer.height / 2;
+    const angle = ((layer.rotation || 0) * Math.PI) / 180;
+    const handleDistance = layer.height / 2 + 20;
+
+    const handleX = centerX + Math.sin(angle) * handleDistance;
+    const handleY = centerY - Math.cos(angle) * handleDistance;
+
+    const dist = Math.sqrt((x - handleX) ** 2 + (y - handleY) ** 2);
+    return dist <= 10;
+  }
+
   private handleMouseMove(e: MouseEvent): void {
+    this.isShiftPressed = e.shiftKey;
+
     if (!this.isDragging || !this.dragLayerId) return;
 
     const pos = this.getCanvasMousePos(e);
     const layer = this.layerManager.getById(this.dragLayerId);
     if (!layer || layer.locked) return;
 
-    const dx = pos.x - this.dragStartX;
-    const dy = pos.y - this.dragStartY;
-
-    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+    if (Math.abs(pos.x - this.dragStartX) > 1 || Math.abs(pos.y - this.dragStartY) > 1) {
       this.hasDragged = true;
     }
+
+    if (this.dragType === 'move') {
+      this.handleMoveDrag(pos.x, pos.y, layer);
+    } else if (this.dragType === 'resize') {
+      this.handleResizeDrag(pos.x, pos.y, layer);
+    } else if (this.dragType === 'rotate') {
+      this.handleRotateDrag(pos.x, pos.y, layer);
+    }
+
+    this.isDirty = true;
+    this.render();
+  }
+
+  private handleMoveDrag(x: number, y: number, layer: Layer): void {
+    const dx = x - this.dragStartX;
+    const dy = y - this.dragStartY;
 
     let newX = this.dragLayerStartX + dx;
     let newY = this.dragLayerStartY + dy;
@@ -282,21 +442,151 @@ export class CreativeDesignEditor {
       newY = snapped.y;
     }
 
-    this.layerManager.update(this.dragLayerId, { x: newX, y: newY });
-    this.isDirty = true;
-    this.render();
+    this.layerManager.update(this.dragLayerId!, { x: newX, y: newY });
+  }
+
+  private handleResizeDrag(x: number, y: number, layer: Layer): void {
+    const handle = this.dragHandle;
+    const ratio = this.isShiftPressed ? this.dragLayerStartW / this.dragLayerStartH : 0;
+
+    const centerX = this.dragLayerStartX + this.dragLayerStartW / 2;
+    const centerY = this.dragLayerStartY + this.dragLayerStartH / 2;
+    const angle = (this.dragLayerStartRot * Math.PI) / 180;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+
+    const dx = x - this.dragStartX;
+    const dy = y - this.dragStartY;
+
+    const localDx = dx * cos + dy * sin;
+    const localDy = -dx * sin + dy * cos;
+
+    let left = this.dragLayerStartX;
+    let right = this.dragLayerStartX + this.dragLayerStartW;
+    let top = this.dragLayerStartY;
+    let bottom = this.dragLayerStartY + this.dragLayerStartH;
+    const minSize = 10;
+
+    if (handle.includes('e')) {
+      right = this.dragLayerStartX + this.dragLayerStartW + localDx;
+    }
+    if (handle.includes('w')) {
+      left = this.dragLayerStartX + localDx;
+    }
+    if (handle.includes('s')) {
+      bottom = this.dragLayerStartY + this.dragLayerStartH + localDy;
+    }
+    if (handle.includes('n')) {
+      top = this.dragLayerStartY + localDy;
+    }
+
+    if (this.isShiftPressed && ratio > 0) {
+      if (handle === 'e' || handle === 'w') {
+        const newW = Math.abs(right - left);
+        const newH = newW / ratio;
+        const cy = (top + bottom) / 2;
+        top = cy - newH / 2;
+        bottom = cy + newH / 2;
+      } else if (handle === 'n' || handle === 's') {
+        const newH = Math.abs(bottom - top);
+        const newW = newH * ratio;
+        const cx = (left + right) / 2;
+        left = cx - newW / 2;
+        right = cx + newW / 2;
+      } else {
+        const newW = Math.abs(right - left);
+        const newH = newW / ratio;
+        if (handle.includes('n')) {
+          top = bottom - newH;
+        }
+        if (handle.includes('s')) {
+          bottom = top + newH;
+        }
+        if (handle.includes('w')) {
+          left = right - newW;
+        }
+        if (handle.includes('e')) {
+          right = left + newW;
+        }
+      }
+    }
+
+    let newX = left;
+    let newY = top;
+    let newW = right - left;
+    let newH = bottom - top;
+
+    if (newW < minSize) {
+      if (handle.includes('w')) newX = right - minSize;
+      newW = minSize;
+    }
+    if (newH < minSize) {
+      if (handle.includes('n')) newY = bottom - minSize;
+      newH = minSize;
+    }
+
+    const snapOptions = this.selectionManager.getSnapOptions();
+    if (snapOptions.enabled && snapOptions.snapToObjects) {
+      const snappedPos = this.selectionManager.snapPosition(newX, newY, {
+        ...layer,
+        x: newX,
+        y: newY,
+        width: newW,
+        height: newH,
+      } as Layer);
+      newX = snappedPos.x;
+      newY = snappedPos.y;
+    }
+
+    this.layerManager.update(this.dragLayerId!, {
+      x: newX,
+      y: newY,
+      width: newW,
+      height: newH,
+    });
+  }
+
+  private handleRotateDrag(x: number, y: number, layer: Layer): void {
+    const centerX = layer.x + layer.width / 2;
+    const centerY = layer.y + layer.height / 2;
+
+    const startAngle = Math.atan2(
+      this.dragStartY - centerY,
+      this.dragStartX - centerX,
+    );
+    const currentAngle = Math.atan2(y - centerY, x - centerX);
+    let deltaDeg = ((currentAngle - startAngle) * 180) / Math.PI;
+
+    let newRotation = this.dragLayerStartRot + deltaDeg;
+
+    if (this.isShiftPressed) {
+      newRotation = Math.round(newRotation / 15) * 15;
+    }
+
+    this.layerManager.update(this.dragLayerId!, { rotation: newRotation });
   }
 
   private handleMouseUp(e: MouseEvent): void {
     if (!this.isDragging) return;
 
     if (this.hasDragged && this.dragLayerId) {
-      this.saveHistory('drag_layer');
-      this.recordAction('drag_layer', { layerId: this.dragLayerId });
+      if (this.dragType === 'move') {
+        this.saveHistory('drag_layer');
+        this.recordAction('drag_layer', { layerId: this.dragLayerId });
+      } else if (this.dragType === 'resize') {
+        this.saveHistory('resize_layer');
+        this.recordAction('resize_layer', { layerId: this.dragLayerId });
+      } else if (this.dragType === 'rotate') {
+        this.saveHistory('rotate_layer');
+        this.recordAction('rotate_layer', { layerId: this.dragLayerId });
+      }
+      this.eventManager.emit('layer:update', { id: this.dragLayerId });
     }
 
     this.isDragging = false;
+    this.dragType = null;
     this.dragLayerId = null;
+    this.dragHandle = '';
     this.hasDragged = false;
     this.canvas.style.cursor = 'default';
   }
@@ -370,8 +660,12 @@ export class CreativeDesignEditor {
   }
 
   updateLayer(id: string, updates: Partial<Layer>): Layer | undefined {
+    const existing = this.layerManager.getById(id);
+    if (!existing || existing.locked) return undefined;
+
     const layer = this.layerManager.update(id, updates);
     if (layer) {
+      this.selectionManager.updateLayer(layer);
       this.recordAction('update_layer', { layerId: id, updates });
       this.eventManager.emit('layer:update', layer);
       this.isDirty = true;
@@ -702,17 +996,27 @@ export class CreativeDesignEditor {
   }
 
   setLayerOpacity(id: string, opacity: number): void {
+    const layer = this.layerManager.getById(id);
+    if (!layer || layer.locked) return;
+
     this.layerManager.update(id, { opacity: Math.max(0, Math.min(1, opacity)) });
+    this.selectionManager.updateLayer(this.layerManager.getById(id)!);
     this.recordAction('change_opacity', { layerId: id, opacity });
     this.saveHistory('change_opacity');
+    this.eventManager.emit('layer:update', { id });
     this.isDirty = true;
     this.render();
   }
 
   setLayerRotation(id: string, rotation: number): void {
+    const layer = this.layerManager.getById(id);
+    if (!layer || layer.locked) return;
+
     this.layerManager.update(id, { rotation });
+    this.selectionManager.updateLayer(this.layerManager.getById(id)!);
     this.recordAction('rotate_layer', { layerId: id, rotation });
     this.saveHistory('rotate_layer');
+    this.eventManager.emit('layer:update', { id });
     this.isDirty = true;
     this.render();
   }
@@ -725,14 +1029,20 @@ export class CreativeDesignEditor {
       this.layerManager.update(id, { x: snapped.x, y: snapped.y });
       this.selectionManager.updateLayer(this.layerManager.getById(id)!);
       this.saveHistory('move_layer');
+      this.eventManager.emit('layer:update', { id });
       this.isDirty = true;
       this.render();
     }
   }
 
   setLayerSize(id: string, width: number, height: number): void {
+    const layer = this.layerManager.getById(id);
+    if (!layer || layer.locked) return;
+
     this.layerManager.update(id, { width, height });
+    this.selectionManager.updateLayer(this.layerManager.getById(id)!);
     this.saveHistory('resize_layer');
+    this.eventManager.emit('layer:update', { id });
     this.isDirty = true;
     this.render();
   }

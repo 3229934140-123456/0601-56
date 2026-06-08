@@ -78,9 +78,6 @@ export class SelectionManager {
     const candidatesX: number[] = [];
     const candidatesY: number[] = [];
 
-    candidatesX.push(x);
-    candidatesY.push(y);
-
     if (this.snapOptions.snapToGrid) {
       const gridSnapX = this.snapToGrid(x, this.snapOptions.gridSize);
       const gridSnapY = this.snapToGrid(y, this.snapOptions.gridSize);
