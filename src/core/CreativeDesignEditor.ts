@@ -282,6 +282,7 @@ export class CreativeDesignEditor {
       this.recordAction('update_layer', { layerId: id, updates });
       this.eventManager.emit('layer:update', layer);
       this.isDirty = true;
+      this.saveHistory('update_layer');
       this.render();
     }
     return layer;
@@ -293,6 +294,7 @@ export class CreativeDesignEditor {
       const { id, ...rest } = update;
       this.layerManager.update(id, rest);
     }
+    this.saveHistory('batch_update');
     this.historyManager.endBatch();
     this.isDirty = true;
     this.render();
@@ -368,6 +370,7 @@ export class CreativeDesignEditor {
         }
 
         this.layerManager.update(id, { x: newX, y: newY });
+        this.saveHistory('nudge_layer');
         this.isDirty = true;
         this.render();
       }
@@ -606,6 +609,7 @@ export class CreativeDesignEditor {
   setLayerOpacity(id: string, opacity: number): void {
     this.layerManager.update(id, { opacity: Math.max(0, Math.min(1, opacity)) });
     this.recordAction('change_opacity', { layerId: id, opacity });
+    this.saveHistory('change_opacity');
     this.isDirty = true;
     this.render();
   }

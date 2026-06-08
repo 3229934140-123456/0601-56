@@ -4,15 +4,10 @@ export class HistoryManager {
   private history: HistoryState[] = [];
   private currentIndex = -1;
   private maxSize = 50;
-  private isCollecting = false;
-  private pendingState: HistoryState | null = null;
+  private isInBatch = false;
+  private batchStartIndex = -1;
 
   push(state: HistoryState): void {
-    if (this.isCollecting) {
-      this.pendingState = { ...state };
-      return;
-    }
-
     if (this.currentIndex < this.history.length - 1) {
       this.history = this.history.slice(0, this.currentIndex + 1);
     }
@@ -31,15 +26,25 @@ export class HistoryManager {
   }
 
   beginBatch(): void {
-    this.isCollecting = true;
+    this.isInBatch = true;
+    this.batchStartIndex = this.currentIndex;
   }
 
   endBatch(): void {
-    this.isCollecting = false;
-    if (this.pendingState) {
-      this.push(this.pendingState);
-      this.pendingState = null;
+    if (!this.isInBatch) return;
+    this.isInBatch = false;
+
+    if (this.batchStartIndex >= 0 && this.currentIndex > this.batchStartIndex) {
+      const stepsToMerge = this.currentIndex - this.batchStartIndex;
+      if (stepsToMerge > 1) {
+        const finalState = this.history[this.currentIndex];
+        this.history = this.history.slice(0, this.batchStartIndex + 1);
+        this.history.push(finalState);
+        this.currentIndex = this.batchStartIndex + 1;
+      }
     }
+
+    this.batchStartIndex = -1;
   }
 
   undo(): HistoryState | null {
