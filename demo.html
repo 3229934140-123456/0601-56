@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>创意设计SDK - 演示</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    h1 {
+      color: #333;
+    }
+    .container {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .canvas-wrapper {
+      background: #fff;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 300px;
+    }
+    .control-group {
+      background: #fff;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .control-group h3 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      font-size: 14px;
+      color: #666;
+    }
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      background: #2196F3;
+      color: #fff;
+      cursor: pointer;
+      font-size: 13px;
+      margin: 2px;
+    }
+    button:hover {
+      background: #1976D2;
+    }
+    button.secondary {
+      background: #757575;
+    }
+    button.secondary:hover {
+      background: #616161;
+    }
+    button.success {
+      background: #4CAF50;
+    }
+    button.success:hover {
+      background: #388E3C;
+    }
+    .layer-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .layer-item {
+      padding: 8px;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      margin-bottom: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .layer-item:hover {
+      background: #f5f5f5;
+    }
+    .layer-item.selected {
+      border-color: #2196F3;
+      background: #E3F2FD;
+    }
+    .info {
+      font-size: 12px;
+      color: #666;
+      padding: 10px;
+      background: #E8F5E9;
+      border-radius: 4px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎨 创意设计SDK 演示</h1>
+  
+  <div class="container">
+    <div class="canvas-wrapper">
+      <div id="editor-container"></div>
+      <div class="info" id="info">
+        状态: 就绪 | 图层数: 0 | 可撤销: 否 | 可重做: 否
+      </div>
+    </div>
+    
+    <div class="controls">
+      <div class="control-group">
+        <h3>➕ 添加图层</h3>
+        <button onclick="addTextLayer()">添加文字</button>
+        <button onclick="addRectLayer()">添加矩形</button>
+        <button onclick="addCircleLayer()">添加圆形</button>
+        <button onclick="addStarLayer()">添加星形</button>
+        <button onclick="addHeartIcon()">爱心图标</button>
+        <button onclick="addImageLayer()">添加图片</button>
+      </div>
+      
+      <div class="control-group">
+        <h3>🔧 图层操作</h3>
+        <button onclick="deleteSelected()" class="secondary">删除选中</button>
+        <button onclick="duplicateSelected()" class="secondary">复制选中</button>
+        <button onclick="bringToFront()">置顶</button>
+        <button onclick="sendToBack()">置底</button>
+        <button onclick="toggleLock()">锁定/解锁</button>
+        <button onclick="toggleVisibility()">显示/隐藏</button>
+      </div>
+      
+      <div class="control-group">
+        <h3>↩️ 历史</h3>
+        <button onclick="undo()">撤销 (Ctrl+Z)</button>
+        <button onclick="redo()">重做 (Ctrl+Y)</button>
+      </div>
+      
+      <div class="control-group">
+        <h3>🖼️ 画布</h3>
+        <button onclick="setWhiteBg()">白色背景</button>
+        <button onclick="setTransparentBg()">透明背景</button>
+        <button onclick="setGradientBg()">渐变背景</button>
+        <button onclick="resizeCanvas()">调整尺寸</button>
+      </div>
+      
+      <div class="control-group">
+        <h3>💾 导出</h3>
+        <button onclick="exportPNG()" class="success">导出PNG</button>
+        <button onclick="exportJPEG()" class="success">导出JPEG</button>
+        <button onclick="exportThumbnail()">生成缩略图</button>
+        <button onclick="saveState()">保存状态</button>
+        <button onclick="loadState()">加载状态</button>
+      </div>
+      
+      <div class="control-group">
+        <h3>📋 图层列表</h3>
+        <ul class="layer-list" id="layer-list"></ul>
+      </div>
+      
+      <div class="control-group">
+        <h3>📝 操作日志</h3>
+        <div id="action-log" style="font-size: 11px; color: #666; max-height: 150px; overflow-y: auto;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./dist/index.js"></script>
+  <script>
+    let editor;
+    let actionCount = 0;
+
+    window.onload = function() {
+      editor = new CreativeDesignSDK.CreativeDesignEditor({
+        container: '#editor-container',
+        width: 600,
+        height: 400,
+        background: {
+          type: 'color',
+          color: '#ffffff'
+        },
+        snap: {
+          enabled: true,
+          snapToGrid: true,
+          gridSize: 10,
+          snapToObjects: true,
+          snapThreshold: 5
+        }
+      });
+
+      editor.on('layer:add', (e) => {
+        updateInfo();
+        updateLayerList();
+      });
+      
+      editor.on('layer:remove', (e) => {
+        updateInfo();
+        updateLayerList();
+      });
+      
+      editor.on('layer:update', (e) => {
+        updateInfo();
+        updateLayerList();
+      });
+      
+      editor.on('layer:select', (e) => {
+        updateLayerList();
+      });
+      
+      editor.onAction((action) => {
+        addActionLog(action.action);
+      });
+
+      updateInfo();
+      updateLayerList();
+    };
+
+    function updateInfo() {
+      const info = document.getElementById('info');
+      const layers = editor.getLayers();
+      const canUndo = editor.canUndo();
+      const canRedo = editor.canRedo();
+      info.textContent = `状态: ${editor.getIsDirty() ? '已修改' : '未修改'} | 图层数: ${layers.length} | 可撤销: ${canUndo ? '是' : '否'} | 可重做: ${canRedo ? '是' : '否'}`;
+    }
+
+    function updateLayerList() {
+      const list = document.getElementById('layer-list');
+      const layers = editor.getLayers();
+      const selectedId = editor.getSelectedLayerId();
+      
+      list.innerHTML = '';
+      [...layers].reverse().forEach(layer => {
+        const li = document.createElement('li');
+        li.className = 'layer-item' + (layer.id === selectedId ? ' selected' : '');
+        li.innerHTML = `
+          <span>${layer.name} (${layer.type})</span>
+          <span style="opacity: 0.6;">${layer.locked ? '🔒' : ''} ${!layer.visible ? '👁️' : ''}</span>
+        `;
+        li.onclick = () => editor.selectLayer(layer.id);
+        list.appendChild(li);
+      });
+    }
+
+    function addActionLog(action) {
+      actionCount++;
+      const log = document.getElementById('action-log');
+      const time = new Date().toLocaleTimeString();
+      log.innerHTML = `<div>[${time}] ${action}</div>` + log.innerHTML;
+    }
+
+    function addTextLayer() {
+      editor.addTextLayer('你好，世界！', {
+        fontSize: 48,
+        color: '#2196F3',
+        x: 150,
+        y: 150,
+        width: 300,
+        height: 60
+      });
+    }
+
+    function addRectLayer() {
+      editor.addShapeLayer('rect', {
+        width: 120,
+        height: 80,
+        fill: '#4CAF50',
+        cornerRadius: 8
+      });
+    }
+
+    function addCircleLayer() {
+      editor.addShapeLayer('circle', {
+        width: 100,
+        height: 100,
+        fill: '#FF9800'
+      });
+    }
+
+    function addStarLayer() {
+      editor.addShapeLayer('star', {
+        width: 100,
+        height: 100,
+        fill: '#FFEB3B',
+        stroke: '#FF9800',
+        strokeWidth: 2
+      });
+    }
+
+    function addHeartIcon() {
+      editor.addIconLayer('heart', {
+        width: 80,
+        height: 80,
+        color: '#E91E63'
+      });
+    }
+
+    function addImageLayer() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 200;
+      canvas.height = 150;
+      const ctx = canvas.getContext('2d');
+      
+      const gradient = ctx.createLinearGradient(0, 0, 200, 150);
+      gradient.addColorStop(0, '#667eea');
+      gradient.addColorStop(1, '#764ba2');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 200, 150);
+      
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 20px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('示例图片', 100, 80);
+      
+      editor.addImageLayer(canvas.toDataURL(), {
+        width: 200,
+        height: 150
+      });
+    }
+
+    function deleteSelected() {
+      editor.deleteSelectedLayer();
+    }
+
+    function duplicateSelected() {
+      editor.duplicateSelectedLayer();
+    }
+
+    function bringToFront() {
+      editor.bringLayerToFront();
+    }
+
+    function sendToBack() {
+      editor.sendLayerToBack();
+    }
+
+    function toggleLock() {
+      const id = editor.getSelectedLayerId();
+      if (id) {
+        editor.toggleLayerLock(id);
+      }
+    }
+
+    function toggleVisibility() {
+      const id = editor.getSelectedLayerId();
+      if (id) {
+        editor.toggleLayerVisibility(id);
+      }
+    }
+
+    function undo() {
+      editor.undo();
+      updateInfo();
+    }
+
+    function redo() {
+      editor.redo();
+      updateInfo();
+    }
+
+    function setWhiteBg() {
+      editor.setBackgroundColor('#ffffff');
+    }
+
+    function setTransparentBg() {
+      editor.setBackgroundTransparent();
+    }
+
+    function setGradientBg() {
+      editor.setBackground({
+        type: 'gradient',
+        gradient: {
+          type: 'linear',
+          colors: ['#667eea', '#764ba2'],
+          angle: 45
+        }
+      });
+    }
+
+    function resizeCanvas() {
+      const size = prompt('输入尺寸 (宽x高):', '800x600');
+      if (size) {
+        const [w, h] = size.split('x').map(Number);
+        if (w && h) {
+          editor.setCanvasSize(w, h);
+        }
+      }
+    }
+
+    function exportPNG() {
+      editor.exportImage({ type: 'png' }).then(dataUrl => {
+        const link = document.createElement('a');
+        link.download = 'design.png';
+        link.href = dataUrl;
+        link.click();
+      });
+    }
+
+    function exportJPEG() {
+      editor.exportImage({ type: 'jpeg', quality: 0.9 }).then(dataUrl => {
+        const link = document.createElement('a');
+        link.download = 'design.jpg';
+        link.href = dataUrl;
+        link.click();
+      });
+    }
+
+    function exportThumbnail() {
+      editor.generateThumbnail({
+        maxWidth: 200,
+        maxHeight: 200,
+        type: 'png'
+      }).then(dataUrl => {
+        const window = window.open('', '_blank');
+        window.document.write(`<img src="${dataUrl}" alt="thumbnail">`);
+      });
+    }
+
+    function saveState() {
+      const state = editor.getState();
+      localStorage.setItem('design-state', state);
+      alert('状态已保存到本地存储');
+    }
+
+    function loadState() {
+      const state = localStorage.getItem('design-state');
+      if (state) {
+        editor.loadState(state);
+        updateInfo();
+        updateLayerList();
+      } else {
+        alert('没有找到已保存的状态');
+      }
+    }
+  </script>
+</body>
+</html>
