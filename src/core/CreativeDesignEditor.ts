@@ -322,7 +322,9 @@ export class CreativeDesignEditor {
   }
 
   getSelectedLayer(): Layer | undefined {
-    return this.selectionManager.getSelectedLayer();
+    const id = this.selectionManager.getSelectedId();
+    if (!id) return undefined;
+    return this.layerManager.getById(id);
   }
 
   getSelectedLayerId(): string | null {
@@ -625,8 +627,11 @@ export class CreativeDesignEditor {
   setLayerPosition(id: string, x: number, y: number): void {
     const layer = this.layerManager.getById(id);
     if (layer && !layer.locked) {
+      this.selectionManager.setLayers(this.layerManager.getAll());
       const snapped = this.selectionManager.snapPosition(x, y, layer);
       this.layerManager.update(id, { x: snapped.x, y: snapped.y });
+      this.selectionManager.updateLayer(this.layerManager.getById(id)!);
+      this.saveHistory('move_layer');
       this.isDirty = true;
       this.render();
     }

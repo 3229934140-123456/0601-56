@@ -9,7 +9,7 @@ export class SelectionManager {
     gridSize: 10,
     snapToGuides: true,
     snapToObjects: true,
-    snapThreshold: 5,
+    snapThreshold: 8,
   };
 
   private guides: { x?: number; y?: number }[] = [];
@@ -23,7 +23,30 @@ export class SelectionManager {
   }
 
   setLayers(layers: Layer[]): void {
-    this.layers = layers;
+    this.layers = [...layers];
+  }
+
+  updateLayer(layer: Layer): void {
+    const index = this.layers.findIndex((l) => l.id === layer.id);
+    if (index > -1) {
+      this.layers[index] = { ...layer };
+    } else {
+      this.layers.push({ ...layer });
+    }
+  }
+
+  removeLayer(id: string): void {
+    const index = this.layers.findIndex((l) => l.id === id);
+    if (index > -1) {
+      this.layers.splice(index, 1);
+    }
+    if (this.selectedId === id) {
+      this.selectedId = null;
+    }
+  }
+
+  addLayer(layer: Layer): void {
+    this.layers.push({ ...layer });
   }
 
   select(id: string | null): void {
@@ -47,107 +70,219 @@ export class SelectionManager {
     this.selectedId = null;
   }
 
-  snapPosition(x: number, y: number, layer?: Layer): Point {
+  snapPosition(x: number, y: number, layer: Layer): Point {
     if (!this.snapOptions.enabled) {
       return { x, y };
     }
 
-    let snappedX = x;
-    let snappedY = y;
+    const candidatesX: number[] = [];
+    const candidatesY: number[] = [];
+
+    candidatesX.push(x);
+    candidatesY.push(y);
 
     if (this.snapOptions.snapToGrid) {
-      snappedX = this.snapToGrid(x, this.snapOptions.gridSize);
-      snappedY = this.snapToGrid(y, this.snapOptions.gridSize);
+      const gridSnapX = this.snapToGrid(x, this.snapOptions.gridSize);
+      const gridSnapY = this.snapToGrid(y, this.snapOptions.gridSize);
+      candidatesX.push(gridSnapX);
+      candidatesY.push(gridSnapY);
     }
 
-    if (this.snapOptions.snapToObjects && layer) {
-      const snapResult = this.snapToObjects(x, y, layer);
-      snappedX = snapResult.x;
-      snappedY = snapResult.y;
+    if (this.snapOptions.snapToObjects) {
+      const objectSnap = this.snapToObjects(x, y, layer);
+      if (objectSnap.snappedX !== null) {
+        candidatesX.push(objectSnap.snappedX);
+      }
+      if (objectSnap.snappedY !== null) {
+        candidatesY.push(objectSnap.snappedY);
+      }
     }
 
-    return { x: snappedX, y: snappedY };
+    if (this.snapOptions.snapToGuides && this.guides.length > 0) {
+      const guideSnap = this.snapToGuides(x, y, layer);
+      if (guideSnap.snappedX !== null) {
+        candidatesX.push(guideSnap.snappedX);
+      }
+      if (guideSnap.snappedY !== null) {
+        candidatesY.push(guideSnap.snappedY);
+      }
+    }
+
+    const bestX = this.findClosest(x, candidatesX, this.snapOptions.snapThreshold);
+    const bestY = this.findClosest(y, candidatesY, this.snapOptions.snapThreshold);
+
+    return { x: bestX, y: bestY };
+  }
+
+  private findClosest(original: number, candidates: number[], threshold: number): number {
+    let closest = original;
+    let minDistance = threshold;
+
+    for (const candidate of candidates) {
+      const distance = Math.abs(candidate - original);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closest = candidate;
+      }
+    }
+
+    return closest;
   }
 
   private snapToGrid(value: number, gridSize: number): number {
     return Math.round(value / gridSize) * gridSize;
   }
 
-  private snapToObjects(x: number, y: number, currentLayer: Layer): Point {
+  private snapToObjects(
+    x: number,
+    y: number,
+    currentLayer: Layer,
+  ): { snappedX: number | null; snappedY: number | null } {
     const threshold = this.snapOptions.snapThreshold;
-    let snapX = x;
-    let snapY = y;
+    let bestSnapX: number | null = null;
+    let bestSnapY: number | null = null;
+    let minDistX = threshold;
+    let minDistY = threshold;
 
     const otherLayers = this.layers.filter((l) => l.id !== currentLayer.id && l.visible);
 
-    const currentEdges = {
-      left: x,
-      right: x + currentLayer.width,
-      top: y,
-      bottom: y + currentLayer.height,
-      centerX: x + currentLayer.width / 2,
-      centerY: y + currentLayer.height / 2,
-    };
+    const currentW = currentLayer.width;
+    const currentH = currentLayer.height;
 
     for (const layer of otherLayers) {
-      const edges = {
-        left: layer.x,
-        right: layer.x + layer.width,
-        top: layer.y,
-        bottom: layer.y + layer.height,
-        centerX: layer.x + layer.width / 2,
-        centerY: layer.y + layer.height / 2,
-      };
+      const refLeft = layer.x;
+      const refRight = layer.x + layer.width;
+      const refTop = layer.y;
+      const refBottom = layer.y + layer.height;
+      const refCenterX = layer.x + layer.width / 2;
+      const refCenterY = layer.y + layer.height / 2;
 
-      if (Math.abs(currentEdges.left - edges.left) < threshold) {
-        snapX = edges.left;
-      }
-      if (Math.abs(currentEdges.left - edges.right) < threshold) {
-        snapX = edges.right;
-      }
-      if (Math.abs(currentEdges.left - edges.centerX) < threshold) {
-        snapX = edges.centerX - currentLayer.width / 2;
-      }
+      const testLeft = x;
+      const testRight = x + currentW;
+      const testTop = y;
+      const testBottom = y + currentH;
+      const testCenterX = x + currentW / 2;
+      const testCenterY = y + currentH / 2;
 
-      if (Math.abs(currentEdges.right - edges.left) < threshold) {
-        snapX = edges.left - currentLayer.width;
-      }
-      if (Math.abs(currentEdges.right - edges.right) < threshold) {
-        snapX = edges.right - currentLayer.width;
-      }
-      if (Math.abs(currentEdges.right - edges.centerX) < threshold) {
-        snapX = edges.centerX - currentLayer.width / 2;
+      const leftLeftDist = Math.abs(testLeft - refLeft);
+      if (leftLeftDist < minDistX) {
+        minDistX = leftLeftDist;
+        bestSnapX = refLeft;
       }
 
-      if (Math.abs(currentEdges.top - edges.top) < threshold) {
-        snapY = edges.top;
-      }
-      if (Math.abs(currentEdges.top - edges.bottom) < threshold) {
-        snapY = edges.bottom;
-      }
-      if (Math.abs(currentEdges.top - edges.centerY) < threshold) {
-        snapY = edges.centerY - currentLayer.height / 2;
+      const leftRightDist = Math.abs(testLeft - refRight);
+      if (leftRightDist < minDistX) {
+        minDistX = leftRightDist;
+        bestSnapX = refRight;
       }
 
-      if (Math.abs(currentEdges.bottom - edges.top) < threshold) {
-        snapY = edges.top - currentLayer.height;
-      }
-      if (Math.abs(currentEdges.bottom - edges.bottom) < threshold) {
-        snapY = edges.bottom - currentLayer.height;
-      }
-      if (Math.abs(currentEdges.bottom - edges.centerY) < threshold) {
-        snapY = edges.centerY - currentLayer.height / 2;
+      const rightLeftDist = Math.abs(testRight - refLeft);
+      if (rightLeftDist < minDistX) {
+        minDistX = rightLeftDist;
+        bestSnapX = refLeft - currentW;
       }
 
-      if (Math.abs(currentEdges.centerX - edges.centerX) < threshold) {
-        snapX = edges.centerX - currentLayer.width / 2;
+      const rightRightDist = Math.abs(testRight - refRight);
+      if (rightRightDist < minDistX) {
+        minDistX = rightRightDist;
+        bestSnapX = refRight - currentW;
       }
-      if (Math.abs(currentEdges.centerY - edges.centerY) < threshold) {
-        snapY = edges.centerY - currentLayer.height / 2;
+
+      const centerXDist = Math.abs(testCenterX - refCenterX);
+      if (centerXDist < minDistX) {
+        minDistX = centerXDist;
+        bestSnapX = refCenterX - currentW / 2;
+      }
+
+      const topTopDist = Math.abs(testTop - refTop);
+      if (topTopDist < minDistY) {
+        minDistY = topTopDist;
+        bestSnapY = refTop;
+      }
+
+      const topBottomDist = Math.abs(testTop - refBottom);
+      if (topBottomDist < minDistY) {
+        minDistY = topBottomDist;
+        bestSnapY = refBottom;
+      }
+
+      const bottomTopDist = Math.abs(testBottom - refTop);
+      if (bottomTopDist < minDistY) {
+        minDistY = bottomTopDist;
+        bestSnapY = refTop - currentH;
+      }
+
+      const bottomBottomDist = Math.abs(testBottom - refBottom);
+      if (bottomBottomDist < minDistY) {
+        minDistY = bottomBottomDist;
+        bestSnapY = refBottom - currentH;
+      }
+
+      const centerYDist = Math.abs(testCenterY - refCenterY);
+      if (centerYDist < minDistY) {
+        minDistY = centerYDist;
+        bestSnapY = refCenterY - currentH / 2;
       }
     }
 
-    return { x: snapX, y: snapY };
+    return { snappedX: bestSnapX, snappedY: bestSnapY };
+  }
+
+  private snapToGuides(
+    x: number,
+    y: number,
+    currentLayer: Layer,
+  ): { snappedX: number | null; snappedY: number | null } {
+    const threshold = this.snapOptions.snapThreshold;
+    let bestSnapX: number | null = null;
+    let bestSnapY: number | null = null;
+    let minDistX = threshold;
+    let minDistY = threshold;
+
+    const centerX = x + currentLayer.width / 2;
+    const centerY = y + currentLayer.height / 2;
+
+    for (const guide of this.guides) {
+      if (guide.x !== undefined) {
+        const leftDist = Math.abs(x - guide.x);
+        const rightDist = Math.abs(x + currentLayer.width - guide.x);
+        const centerDist = Math.abs(centerX - guide.x);
+
+        if (leftDist < minDistX) {
+          minDistX = leftDist;
+          bestSnapX = guide.x;
+        }
+        if (rightDist < minDistX) {
+          minDistX = rightDist;
+          bestSnapX = guide.x - currentLayer.width;
+        }
+        if (centerDist < minDistX) {
+          minDistX = centerDist;
+          bestSnapX = guide.x - currentLayer.width / 2;
+        }
+      }
+
+      if (guide.y !== undefined) {
+        const topDist = Math.abs(y - guide.y);
+        const bottomDist = Math.abs(y + currentLayer.height - guide.y);
+        const centerDist = Math.abs(centerY - guide.y);
+
+        if (topDist < minDistY) {
+          minDistY = topDist;
+          bestSnapY = guide.y;
+        }
+        if (bottomDist < minDistY) {
+          minDistY = bottomDist;
+          bestSnapY = guide.y - currentLayer.height;
+        }
+        if (centerDist < minDistY) {
+          minDistY = centerDist;
+          bestSnapY = guide.y - currentLayer.height / 2;
+        }
+      }
+    }
+
+    return { snappedX: bestSnapX, snappedY: bestSnapY };
   }
 
   addGuide(guide: { x?: number; y?: number }): void {

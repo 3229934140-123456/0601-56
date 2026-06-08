@@ -56,7 +56,7 @@ export class ExportManager {
     ctx.clearRect(0, 0, exportWidth, exportHeight);
 
     if (includeBackground) {
-      this.renderBackgroundScaled(canvasSettings, scaleX, scaleY, exportWidth, exportHeight);
+      await this.renderBackgroundScaled(canvasSettings, scaleX, scaleY, exportWidth, exportHeight);
     }
 
     ctx.save();
@@ -75,13 +75,13 @@ export class ExportManager {
     return this.exportCanvas.toDataURL(mimeType, quality);
   }
 
-  private renderBackgroundScaled(
+  private async renderBackgroundScaled(
     canvasSettings: CanvasSettings,
     scaleX: number,
     scaleY: number,
     exportWidth: number,
     exportHeight: number,
-  ): void {
+  ): Promise<void> {
     const ctx = this.exportRenderer.getContext();
     const bg = canvasSettings.background;
 
@@ -97,7 +97,7 @@ export class ExportManager {
         break;
       case 'image':
         if (bg.image) {
-          this.drawBackgroundImage(bg.image, exportWidth, exportHeight);
+          await this.drawBackgroundImage(bg.image, exportWidth, exportHeight);
         } else {
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(0, 0, exportWidth, exportHeight);
