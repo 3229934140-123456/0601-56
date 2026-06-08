@@ -56,6 +56,18 @@ export class CreativeDesignEditor {
   private isRendering = false;
   private renderPending = false;
 
+  private isDragging = false;
+  private dragLayerId: string | null = null;
+  private dragStartX = 0;
+  private dragStartY = 0;
+  private dragLayerStartX = 0;
+  private dragLayerStartY = 0;
+  private hasDragged = false;
+
+  private boundHandleMouseDown: (e: MouseEvent) => void;
+  private boundHandleMouseMove: (e: MouseEvent) => void;
+  private boundHandleMouseUp: (e: MouseEvent) => void;
+
   constructor(options: EditorOptions) {
     const containerElement = typeof options.container === 'string'
       ? document.querySelector(options.container)
@@ -102,6 +114,14 @@ export class CreativeDesignEditor {
     }
 
     this.exportManager.setRenderer(this.renderer);
+
+    this.boundHandleMouseDown = this.handleMouseDown.bind(this);
+    this.boundHandleMouseMove = this.handleMouseMove.bind(this);
+    this.boundHandleMouseUp = this.handleMouseUp.bind(this);
+
+    this.canvas.addEventListener('mousedown', this.boundHandleMouseDown);
+    window.addEventListener('mousemove', this.boundHandleMouseMove);
+    window.addEventListener('mouseup', this.boundHandleMouseUp);
 
     this.saveHistory('initial');
     this.render();
@@ -206,6 +226,79 @@ export class CreativeDesignEditor {
     }
 
     ctx.restore();
+  }
+
+  private getCanvasMousePos(e: MouseEvent): { x: number; y: number } {
+    const rect = this.canvas.getBoundingClientRect();
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
+  }
+
+  private handleMouseDown(e: MouseEvent): void {
+    if (e.button !== 0) return;
+
+    const pos = this.getCanvasMousePos(e);
+    const layer = this.layerManager.getLayerAtPoint(pos.x, pos.y);
+
+    if (layer) {
+      this.selectLayer(layer.id);
+      this.isDragging = true;
+      this.dragLayerId = layer.id;
+      this.dragStartX = pos.x;
+      this.dragStartY = pos.y;
+      this.dragLayerStartX = layer.x;
+      this.dragLayerStartY = layer.y;
+      this.hasDragged = false;
+      this.canvas.style.cursor = 'move';
+      this.selectionManager.setLayers(this.layerManager.getAll());
+    } else {
+      this.clearSelection();
+    }
+  }
+
+  private handleMouseMove(e: MouseEvent): void {
+    if (!this.isDragging || !this.dragLayerId) return;
+
+    const pos = this.getCanvasMousePos(e);
+    const layer = this.layerManager.getById(this.dragLayerId);
+    if (!layer || layer.locked) return;
+
+    const dx = pos.x - this.dragStartX;
+    const dy = pos.y - this.dragStartY;
+
+    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+      this.hasDragged = true;
+    }
+
+    let newX = this.dragLayerStartX + dx;
+    let newY = this.dragLayerStartY + dy;
+
+    const snapOptions = this.selectionManager.getSnapOptions();
+    if (snapOptions.enabled) {
+      const snapped = this.selectionManager.snapPosition(newX, newY, layer);
+      newX = snapped.x;
+      newY = snapped.y;
+    }
+
+    this.layerManager.update(this.dragLayerId, { x: newX, y: newY });
+    this.isDirty = true;
+    this.render();
+  }
+
+  private handleMouseUp(e: MouseEvent): void {
+    if (!this.isDragging) return;
+
+    if (this.hasDragged && this.dragLayerId) {
+      this.saveHistory('drag_layer');
+      this.recordAction('drag_layer', { layerId: this.dragLayerId });
+    }
+
+    this.isDragging = false;
+    this.dragLayerId = null;
+    this.hasDragged = false;
+    this.canvas.style.cursor = 'default';
   }
 
   addImageLayer(src: string, options?: Partial<ImageLayer>): ImageLayer {
@@ -869,6 +962,10 @@ export class CreativeDesignEditor {
     this.backgroundRemover.destroy();
     this.layerManager.clear();
     this.historyManager.clear();
+
+    this.canvas.removeEventListener('mousedown', this.boundHandleMouseDown);
+    window.removeEventListener('mousemove', this.boundHandleMouseMove);
+    window.removeEventListener('mouseup', this.boundHandleMouseUp);
 
     if (this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas);

@@ -13,23 +13,29 @@
     }
     h1 {
       color: #333;
+      margin-top: 0;
     }
     .container {
       display: flex;
       gap: 20px;
       flex-wrap: wrap;
+      align-items: flex-start;
     }
     .canvas-wrapper {
       background: #fff;
       border-radius: 8px;
       padding: 20px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      position: sticky;
+      top: 20px;
     }
     .controls {
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      max-width: 300px;
+      gap: 12px;
+      max-width: 320px;
+      flex: 1;
+      min-width: 280px;
     }
     .control-group {
       background: #fff;
@@ -44,13 +50,13 @@
       color: #666;
     }
     button {
-      padding: 8px 16px;
+      padding: 7px 14px;
       border: none;
       border-radius: 4px;
       background: #2196F3;
       color: #fff;
       cursor: pointer;
-      font-size: 13px;
+      font-size: 12px;
       margin: 2px;
     }
     button:hover {
@@ -68,6 +74,12 @@
     button.success:hover {
       background: #388E3C;
     }
+    button.danger {
+      background: #f44336;
+    }
+    button.danger:hover {
+      background: #d32f2f;
+    }
     .layer-list {
       list-style: none;
       padding: 0;
@@ -79,7 +91,7 @@
       border-radius: 4px;
       margin-bottom: 4px;
       cursor: pointer;
-      font-size: 13px;
+      font-size: 12px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -99,6 +111,66 @@
       border-radius: 4px;
       margin-top: 10px;
     }
+    .thumbnail-result {
+      margin-top: 10px;
+      padding: 10px;
+      background: #f9f9f9;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      text-align: center;
+    }
+    .thumbnail-result img {
+      max-width: 100%;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .thumbnail-result a {
+      display: inline-block;
+      margin-top: 8px;
+      font-size: 12px;
+      color: #2196F3;
+      text-decoration: none;
+    }
+    .property-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 6px 0;
+      font-size: 12px;
+    }
+    .property-row label {
+      color: #666;
+    }
+    .property-row input[type="number"],
+    .property-row input[type="range"] {
+      width: 120px;
+      font-size: 12px;
+    }
+    .property-row input[type="color"] {
+      width: 40px;
+      height: 24px;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+    }
+    .no-selection {
+      color: #999;
+      font-size: 12px;
+      font-style: italic;
+    }
+    .snap-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .snap-options label {
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -116,35 +188,63 @@
       <div class="control-group">
         <h3>➕ 添加图层</h3>
         <button onclick="addTextLayer()">添加文字</button>
-        <button onclick="addRectLayer()">添加矩形</button>
-        <button onclick="addCircleLayer()">添加圆形</button>
-        <button onclick="addStarLayer()">添加星形</button>
+        <button onclick="addCurvedTextLayer()">弯曲文字</button>
+        <button onclick="addRectLayer()">矩形</button>
+        <button onclick="addCircleLayer()">圆形</button>
+        <button onclick="addStarLayer()">星形</button>
+        <button onclick="addArrowLayer()">箭头</button>
+        <button onclick="addLineLayer()">线条</button>
         <button onclick="addHeartIcon()">爱心图标</button>
-        <button onclick="addImageLayer()">添加图片</button>
+        <button onclick="addImageLayer()">图片</button>
       </div>
       
       <div class="control-group">
         <h3>🔧 图层操作</h3>
-        <button onclick="deleteSelected()" class="secondary">删除选中</button>
-        <button onclick="duplicateSelected()" class="secondary">复制选中</button>
+        <button onclick="deleteSelected()" class="danger">删除</button>
+        <button onclick="duplicateSelected()" class="secondary">复制</button>
         <button onclick="bringToFront()">置顶</button>
         <button onclick="sendToBack()">置底</button>
+        <button onclick="moveLayerUp()">上移</button>
+        <button onclick="moveLayerDown()">下移</button>
         <button onclick="toggleLock()">锁定/解锁</button>
         <button onclick="toggleVisibility()">显示/隐藏</button>
       </div>
       
       <div class="control-group">
-        <h3>↩️ 历史</h3>
-        <button onclick="undo()">撤销 (Ctrl+Z)</button>
-        <button onclick="redo()">重做 (Ctrl+Y)</button>
+        <h3>📐 选中图层属性</h3>
+        <div id="layer-properties">
+          <div class="no-selection">请先选择一个图层</div>
+        </div>
       </div>
       
       <div class="control-group">
-        <h3>🖼️ 画布</h3>
-        <button onclick="setWhiteBg()">白色背景</button>
-        <button onclick="setTransparentBg()">透明背景</button>
-        <button onclick="setGradientBg()">渐变背景</button>
-        <button onclick="resizeCanvas()">调整尺寸</button>
+        <h3>↩️ 撤销重做</h3>
+        <button onclick="undo()">撤销 (Ctrl+Z)</button>
+        <button onclick="redo()">重做 (Ctrl+Y)</button>
+        <div style="margin-top:8px; font-size:12px; color:#666;">
+          提示: 拖动、缩放、旋转、改透明度都能撤销
+        </div>
+      </div>
+      
+      <div class="control-group">
+        <h3>🧲 吸附设置</h3>
+        <div class="snap-options">
+          <label><input type="checkbox" id="snap-enabled" checked onchange="updateSnapOptions()"> 启用吸附</label>
+          <label><input type="checkbox" id="snap-grid" checked onchange="updateSnapOptions()"> 网格吸附</label>
+          <label><input type="checkbox" id="snap-objects" checked onchange="updateSnapOptions()"> 对象吸附</label>
+        </div>
+        <div class="property-row" style="margin-top:6px;">
+          <label>网格大小</label>
+          <input type="number" id="grid-size" value="10" min="1" max="50" onchange="updateSnapOptions()">
+        </div>
+      </div>
+      
+      <div class="control-group">
+        <h3>🖼️ 画布背景</h3>
+        <button onclick="setWhiteBg()">白色</button>
+        <button onclick="setTransparentBg()">透明</button>
+        <button onclick="setGradientBg()">渐变</button>
+        <button onclick="setImageBg()">图片背景</button>
       </div>
       
       <div class="control-group">
@@ -152,18 +252,14 @@
         <button onclick="exportPNG()" class="success">导出PNG</button>
         <button onclick="exportJPEG()" class="success">导出JPEG</button>
         <button onclick="exportThumbnail()">生成缩略图</button>
-        <button onclick="saveState()">保存状态</button>
-        <button onclick="loadState()">加载状态</button>
+        <div id="thumbnail-container"></div>
+        <button onclick="saveState()" class="secondary" style="margin-top:8px;">保存状态</button>
+        <button onclick="loadState()" class="secondary">加载状态</button>
       </div>
       
       <div class="control-group">
         <h3>📋 图层列表</h3>
         <ul class="layer-list" id="layer-list"></ul>
-      </div>
-      
-      <div class="control-group">
-        <h3>📝 操作日志</h3>
-        <div id="action-log" style="font-size: 11px; color: #666; max-height: 150px; overflow-y: auto;"></div>
       </div>
     </div>
   </div>
@@ -171,7 +267,6 @@
   <script src="./dist/index.js"></script>
   <script>
     let editor;
-    let actionCount = 0;
 
     window.onload = function() {
       editor = new CreativeDesignSDK.CreativeDesignEditor({
@@ -187,36 +282,25 @@
           snapToGrid: true,
           gridSize: 10,
           snapToObjects: true,
-          snapThreshold: 5
+          snapThreshold: 8
         }
       });
 
-      editor.on('layer:add', (e) => {
-        updateInfo();
-        updateLayerList();
-      });
-      
-      editor.on('layer:remove', (e) => {
-        updateInfo();
-        updateLayerList();
-      });
-      
-      editor.on('layer:update', (e) => {
-        updateInfo();
-        updateLayerList();
-      });
-      
-      editor.on('layer:select', (e) => {
-        updateLayerList();
-      });
-      
-      editor.onAction((action) => {
-        addActionLog(action.action);
-      });
+      editor.on('layer:add', updateUI);
+      editor.on('layer:remove', updateUI);
+      editor.on('layer:update', updateUI);
+      editor.on('layer:select', updateUI);
+      editor.on('canvas:update', updateUI);
+      editor.on('history:change', updateUI);
 
+      updateUI();
+    };
+
+    function updateUI() {
       updateInfo();
       updateLayerList();
-    };
+      updateLayerProperties();
+    }
 
     function updateInfo() {
       const info = document.getElementById('info');
@@ -237,64 +321,177 @@
         li.className = 'layer-item' + (layer.id === selectedId ? ' selected' : '');
         li.innerHTML = `
           <span>${layer.name} (${layer.type})</span>
-          <span style="opacity: 0.6;">${layer.locked ? '🔒' : ''} ${!layer.visible ? '👁️' : ''}</span>
+          <span style="opacity: 0.6;">${layer.locked ? '🔒' : ''}${!layer.visible ? '👁️' : ''}</span>
         `;
         li.onclick = () => editor.selectLayer(layer.id);
         list.appendChild(li);
       });
     }
 
-    function addActionLog(action) {
-      actionCount++;
-      const log = document.getElementById('action-log');
-      const time = new Date().toLocaleTimeString();
-      log.innerHTML = `<div>[${time}] ${action}</div>` + log.innerHTML;
+    function updateLayerProperties() {
+      const propsDiv = document.getElementById('layer-properties');
+      const layer = editor.getSelectedLayer();
+      
+      if (!layer) {
+        propsDiv.innerHTML = '<div class="no-selection">请先选择一个图层</div>';
+        return;
+      }
+
+      let html = '';
+      html += `<div style="font-size:12px; font-weight:bold; margin-bottom:8px; color:#333;">${layer.name}</div>`;
+      
+      html += '<div class="property-row"><label>位置 X</label>';
+      html += `<input type="number" value="${Math.round(layer.x)}" onchange="setLayerProp('x', Number(this.value))"></div>`;
+      
+      html += '<div class="property-row"><label>位置 Y</label>';
+      html += `<input type="number" value="${Math.round(layer.y)}" onchange="setLayerProp('y', Number(this.value))"></div>`;
+      
+      html += '<div class="property-row"><label>宽度</label>';
+      html += `<input type="number" value="${Math.round(layer.width)}" onchange="setLayerProp('width', Number(this.value))"></div>`;
+      
+      html += '<div class="property-row"><label>高度</label>';
+      html += `<input type="number" value="${Math.round(layer.height)}" onchange="setLayerProp('height', Number(this.value))"></div>`;
+      
+      html += '<div class="property-row"><label>旋转 (°)</label>';
+      html += `<input type="number" value="${Math.round(layer.rotation || 0)}" onchange="setLayerProp('rotation', Number(this.value))"></div>`;
+      
+      html += '<div class="property-row"><label>透明度</label>';
+      html += `<input type="range" min="0" max="1" step="0.1" value="${layer.opacity ?? 1}" onchange="setLayerOpacity(Number(this.value))">`;
+      html += `<span style="width:30px;">${Math.round((layer.opacity ?? 1) * 100)}%</span></div>`;
+      
+      if (layer.type === 'text') {
+        html += '<div class="property-row"><label>字号</label>';
+        html += `<input type="number" value="${layer.fontSize || 24}" onchange="setLayerProp('fontSize', Number(this.value))"></div>`;
+        
+        html += '<div class="property-row"><label>颜色</label>';
+        html += `<input type="color" value="${layer.color || '#000000'}" onchange="setLayerProp('color', this.value)"></div>`;
+        
+        html += '<div class="property-row"><label>描边颜色</label>';
+        html += `<input type="color" value="${layer.strokeColor || '#ffffff'}" onchange="setLayerProp('strokeColor', this.value)"></div>`;
+        
+        html += '<div class="property-row"><label>描边宽度</label>';
+        html += `<input type="number" value="${layer.strokeWidth || 0}" min="0" max="20" onchange="setLayerProp('strokeWidth', Number(this.value))"></div>`;
+      }
+      
+      if (layer.type === 'shape') {
+        html += '<div class="property-row"><label>填充色</label>';
+        html += `<input type="color" value="${layer.fill || '#2196F3'}" onchange="setLayerProp('fill', this.value)"></div>`;
+        
+        html += '<div class="property-row"><label>描边色</label>';
+        html += `<input type="color" value="${layer.stroke || '#000000'}" onchange="setLayerProp('stroke', this.value)"></div>`;
+      }
+      
+      propsDiv.innerHTML = html;
+    }
+
+    function setLayerProp(prop, value) {
+      const id = editor.getSelectedLayerId();
+      if (!id) return;
+      editor.updateLayer(id, { [prop]: value });
+    }
+
+    function setLayerOpacity(value) {
+      const id = editor.getSelectedLayerId();
+      if (!id) return;
+      editor.setLayerOpacity(id, value);
     }
 
     function addTextLayer() {
-      editor.addTextLayer('你好，世界！', {
+      const layer = editor.addTextLayer('你好，世界！', {
         fontSize: 48,
         color: '#2196F3',
-        x: 150,
-        y: 150,
+        x: 180,
+        y: 160,
         width: 300,
         height: 60
       });
+      editor.selectLayer(layer.id);
+    }
+
+    function addCurvedTextLayer() {
+      const layer = editor.addTextLayer('弯曲文字效果测试', {
+        fontSize: 36,
+        color: '#E91E63',
+        x: 150,
+        y: 100,
+        width: 350,
+        height: 120,
+        curved: true,
+        curveRadius: 200,
+        curveAngle: 120,
+        strokeColor: '#ffffff',
+        strokeWidth: 2
+      });
+      editor.selectLayer(layer.id);
     }
 
     function addRectLayer() {
-      editor.addShapeLayer('rect', {
+      const layer = editor.addShapeLayer('rect', {
         width: 120,
         height: 80,
         fill: '#4CAF50',
-        cornerRadius: 8
+        cornerRadius: 8,
+        x: 50,
+        y: 50
       });
+      editor.selectLayer(layer.id);
     }
 
     function addCircleLayer() {
-      editor.addShapeLayer('circle', {
+      const layer = editor.addShapeLayer('circle', {
         width: 100,
         height: 100,
-        fill: '#FF9800'
+        fill: '#FF9800',
+        x: 200,
+        y: 100
       });
+      editor.selectLayer(layer.id);
     }
 
     function addStarLayer() {
-      editor.addShapeLayer('star', {
+      const layer = editor.addShapeLayer('star', {
         width: 100,
         height: 100,
         fill: '#FFEB3B',
         stroke: '#FF9800',
-        strokeWidth: 2
+        strokeWidth: 2,
+        x: 350,
+        y: 80
       });
+      editor.selectLayer(layer.id);
+    }
+
+    function addArrowLayer() {
+      const layer = editor.addShapeLayer('arrow', {
+        width: 150,
+        height: 50,
+        fill: '#9C27B0',
+        x: 100,
+        y: 250
+      });
+      editor.selectLayer(layer.id);
+    }
+
+    function addLineLayer() {
+      const layer = editor.addShapeLayer('line', {
+        width: 200,
+        height: 2,
+        fill: '#333333',
+        x: 50,
+        y: 320
+      });
+      editor.selectLayer(layer.id);
     }
 
     function addHeartIcon() {
-      editor.addIconLayer('heart', {
+      const layer = editor.addIconLayer('heart', {
         width: 80,
         height: 80,
-        color: '#E91E63'
+        color: '#E91E63',
+        x: 450,
+        y: 200
       });
+      editor.selectLayer(layer.id);
     }
 
     function addImageLayer() {
@@ -314,10 +511,13 @@
       ctx.textAlign = 'center';
       ctx.fillText('示例图片', 100, 80);
       
-      editor.addImageLayer(canvas.toDataURL(), {
+      const layer = editor.addImageLayer(canvas.toDataURL(), {
         width: 200,
-        height: 150
+        height: 150,
+        x: 300,
+        y: 200
       });
+      editor.selectLayer(layer.id);
     }
 
     function deleteSelected() {
@@ -336,28 +536,46 @@
       editor.sendLayerToBack();
     }
 
+    function moveLayerUp() {
+      const id = editor.getSelectedLayerId();
+      if (id) editor.moveLayerUp(id);
+    }
+
+    function moveLayerDown() {
+      const id = editor.getSelectedLayerId();
+      if (id) editor.moveLayerDown(id);
+    }
+
     function toggleLock() {
       const id = editor.getSelectedLayerId();
-      if (id) {
-        editor.toggleLayerLock(id);
-      }
+      if (id) editor.toggleLayerLock(id);
     }
 
     function toggleVisibility() {
       const id = editor.getSelectedLayerId();
-      if (id) {
-        editor.toggleLayerVisibility(id);
-      }
+      if (id) editor.toggleLayerVisibility(id);
     }
 
     function undo() {
       editor.undo();
-      updateInfo();
     }
 
     function redo() {
       editor.redo();
-      updateInfo();
+    }
+
+    function updateSnapOptions() {
+      const enabled = document.getElementById('snap-enabled').checked;
+      const snapToGrid = document.getElementById('snap-grid').checked;
+      const snapToObjects = document.getElementById('snap-objects').checked;
+      const gridSize = Number(document.getElementById('grid-size').value);
+      
+      editor.setSnapOptions({
+        enabled,
+        snapToGrid,
+        snapToObjects,
+        gridSize
+      });
     }
 
     function setWhiteBg() {
@@ -379,14 +597,24 @@
       });
     }
 
-    function resizeCanvas() {
-      const size = prompt('输入尺寸 (宽x高):', '800x600');
-      if (size) {
-        const [w, h] = size.split('x').map(Number);
-        if (w && h) {
-          editor.setCanvasSize(w, h);
+    function setImageBg() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 200;
+      canvas.height = 200;
+      const ctx = canvas.getContext('2d');
+      
+      ctx.fillStyle = '#f0f0f0';
+      ctx.fillRect(0, 0, 200, 200);
+      for (let i = 0; i < 200; i += 20) {
+        for (let j = 0; j < 200; j += 20) {
+          if ((i + j) % 40 === 0) {
+            ctx.fillStyle = '#d0d0d0';
+            ctx.fillRect(i, j, 20, 20);
+          }
         }
       }
+      
+      editor.setBackgroundImage(canvas.toDataURL());
     }
 
     function exportPNG() {
@@ -408,13 +636,42 @@
     }
 
     function exportThumbnail() {
+      const container = document.getElementById('thumbnail-container');
+      container.innerHTML = '<div style="font-size:12px; color:#666; margin-top:8px;">正在生成...</div>';
+      
       editor.generateThumbnail({
-        maxWidth: 200,
+        maxWidth: 280,
         maxHeight: 200,
         type: 'png'
       }).then(dataUrl => {
-        const window = window.open('', '_blank');
-        window.document.write(`<img src="${dataUrl}" alt="thumbnail">`);
+        let opened = null;
+        try {
+          opened = window.open('', '_blank');
+          if (opened) {
+            opened.document.write(`
+              <html><head><title>缩略图预览</title></head>
+              <body style="margin:0; display:flex; justify-content:center; align-items:center; min-height:100vh; background:#f5f5f5;">
+                <img src="${dataUrl}" style="max-width:90%; max-height:90vh; box-shadow:0 4px 20px rgba(0,0,0,0.2);">
+              </body></html>
+            `);
+            opened.document.close();
+          }
+        } catch (e) {
+          opened = null;
+        }
+        
+        container.innerHTML = `
+          <div class="thumbnail-result">
+            <div style="font-size:12px; color:#666; margin-bottom:6px;">
+              ${opened ? '新窗口已打开，同时在下方显示：' : '浏览器拦截了弹窗，缩略图显示在下方：'}
+            </div>
+            <img src="${dataUrl}" alt="缩略图">
+            <br>
+            <a href="${dataUrl}" download="thumbnail.png">📥 点击下载缩略图</a>
+          </div>
+        `;
+      }).catch(err => {
+        container.innerHTML = `<div style="color:#f44336; font-size:12px; margin-top:8px;">生成失败: ${err.message}</div>`;
       });
     }
 
@@ -428,8 +685,6 @@
       const state = localStorage.getItem('design-state');
       if (state) {
         editor.loadState(state);
-        updateInfo();
-        updateLayerList();
       } else {
         alert('没有找到已保存的状态');
       }

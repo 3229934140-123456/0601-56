@@ -89,7 +89,6 @@ export class ExportManager {
 
     switch (bg.type) {
       case 'transparent':
-        this.drawTransparentPattern(exportWidth, exportHeight);
         break;
       case 'color':
         ctx.fillStyle = bg.color || '#ffffff';
